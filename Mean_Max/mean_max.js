@@ -1,8 +1,3 @@
-/**
- * Auto-generated code below aims at helping you parse
- * the standard input according to the problem statement.
- **/
-
 function Reaper() {
     var unitId = -1;
     var playerId = -1;
@@ -12,6 +7,8 @@ function Reaper() {
     var yPos = 0;
     var xVel = 0;
     var yVel = 0;
+    var friction = 0.2;
+    var throttle = 0;
 }
 
 function Destroyer() {
@@ -23,6 +20,8 @@ function Destroyer() {
     var yPos = 0;
     var xVel = 0;
     var yVel = 0;
+    var friction = 0.3;
+    var throttle = 0;
 }
 
 function Doof() {
@@ -34,6 +33,8 @@ function Doof() {
     var yPos = 0;
     var xVel = 0;
     var yVel = 0;
+    var friction = 0.3;
+    var throttle = 0;
 }
 
 function Tanker() {
@@ -46,6 +47,8 @@ function Tanker() {
     var yVel = 0;
     var waterQuantity = -1;
     var waterCapacity = -1;
+    var friction = 0.4;
+    var throttle = 500;
 }
 
 function Wreck() {
@@ -68,7 +71,7 @@ function createUpdateReaper( unitId, inputs ) {
     
     tmpReaper.playerId = parseInt(inputs[2]);
     
-    if( tmpReaper.playerId == 0 && !myReaper) {
+    if( tmpReaper.playerId === 0 && !myReaper) {
         myReaper = tmpReaper;
     }
     
@@ -94,7 +97,7 @@ function createUpdateDestroyer( unitId, inputs ) {
     
     tmpDestroyer.playerId = parseInt(inputs[2]);
     
-    if( tmpDestroyer.playerId == 0 && !myDestroyer) {
+    if( tmpDestroyer.playerId === 0 && !myDestroyer) {
         myDestroyer = tmpDestroyer;
     }
     
@@ -120,7 +123,7 @@ function createUpdateDoof( unitId, inputs ) {
     
     tmpDoof.playerId = parseInt(inputs[2]);
     
-    if( tmpDoof.playerId == 0 && !myDoof) {
+    if( tmpDoof.playerId === 0 && !myDoof) {
         myDoof = tmpDoof;
     }
     
@@ -187,11 +190,39 @@ function checkInsideRadius( wreck, reaper ) {
 function stopVehicle( vehicle ) {
     var xDir = vehicle.xPos - vehicle.xVel;
     var yDir = vehicle.yPos - vehicle.yVel;
-    return '' + xDir + ' ' + yDir + ' 150';
+    return '' + xDir + ' ' + yDir + ' 299';
+}
+
+function calculateNitroGrenade( topWreckId, destroyer ) {
+    var targetWreck = null;
+    for (var key in wrecks) {
+        if (wrecks.hasOwnProperty(key) && key !== topWreckId ) {
+            var myReaperInsideWreck = checkInsideRadius(wrecks[key], myReaper);
+            for( var reaperIdIndex in reaperIds ) {
+                var reaperId =  reaperIds[reaperIdIndex];
+                if( reaperId != myReaper.unitId ) {
+                    var targetInsideWreck = checkInsideRadius( wrecks[key], reapers[reaperId]);
+                    
+                    if( targetInsideWreck && !myReaperInsideWreck) {
+                        targetWreck = wrecks[key];
+                        break;
+                    }
+                }   
+            }
+        } 
+    }
+    
+    if( targetWreck ) {
+        return 'SKILL ' + targetWreck.xPos + ' ' + targetWreck.yPos;
+    } else {
+        return stopVehicle( destroyer );
+    }
 }
 
 // Vehicle Lists
 var reapers = {};
+var reaperIds = [];
+
 var destroyers = {};
 var doofs = {};
 var tankers = {};
@@ -204,12 +235,21 @@ var myReaper;
 var myDestroyer;
 var myDoof;
 
+// Doof Movement
+var turnCount = 0;
+var xDesiredPos = -4000;
+var yDesiredPos = -4000;
+var xAdd = true;
+var yAdd = true;
+
 // game loop
 while (true) {
     
-    var reaperMovement = 'WAIT';
-    var destroyerMovement = 'WAIT';
-    var doofMovement = 'WAIT';
+    turnCount++;
+    
+    var reaperAction = 'WAIT';
+    var destroyerAction = 'WAIT';
+    var doofAction = 'WAIT';
     
     var myScore = parseInt(readline());
     var enemyScore1 = parseInt(readline());
@@ -224,8 +264,9 @@ while (true) {
     var topWaterQuantity = 0;
     var topWreckId = -1;
     
-    // Clear Tankers
+    // Clear Tankers & Wrecks
     tankers = {};
+    wrecks = {};
     var lastTankerId = -1;
     
     var reaperInsideWreck = false;
@@ -234,16 +275,19 @@ while (true) {
         var inputs = readline().split(' ');
         var unitId = parseInt(inputs[0]);
         var unitType = parseInt(inputs[1]);
-        if( unitType == 0 ) {
+        if( unitType === 0 ) {
             createUpdateReaper( unitId, inputs );
-        } else if( unitType == 1) {
+            if( !reaperIds[unitId] ) {
+                reaperIds.push(unitId);   
+            }
+        } else if( unitType === 1) {
             createUpdateDestroyer( unitId, inputs );
-        } else if( unitType == 2) {
+        } else if( unitType === 2) {
             createUpdateDoof( unitId, inputs );
-        } else if( unitType == 3) {
+        } else if( unitType === 3) {
             createUpdateTanker( unitId, inputs );
             lastTankerId = unitId;
-        } else if( unitType == 4 ) {
+        } else if( unitType === 4 ) {
             var tmpWreck = createUpdateWreck( unitId, inputs );
             
             if( tmpWreck.waterQuantity > topWaterQuantity ) {
@@ -268,33 +312,63 @@ while (true) {
     }
     
     if( reaperInsideWreck ) {
-        if( myReaper.xVel == 0 && myReaper.yVel == 0 ) {
-            reaperMovement = 'WAIT';   
+        if( myReaper.xVel === 0 && myReaper.yVel == 0 ) {
+            reaperAction = 'WAIT';   
         } else {
-            reaperMovement = stopVehicle( myReaper );   
+            reaperAction = stopVehicle( myReaper );   
         }
     } else {
         if( topWreckId !== -1 ) {
             var tmpWreck = wrecks[topWreckId];
-            reaperMovement = '' + tmpWreck.xPos + ' ' + tmpWreck.yPos + ' 150';
+            reaperAction = '' + tmpWreck.xPos + ' ' + tmpWreck.yPos + ' 299';
         } else {
-            reaperMovement = stopVehicle( myReaper );
+            reaperAction = stopVehicle( myReaper );
         }
     }
     
-    if( lastTankerId != -1 ) {
+    if( lastTankerId !== -1 && Object.keys(wrecks).length < 4 ) {
         var tanker = tankers[lastTankerId];
-        destroyerMovement = '' + tanker.xPos + ' ' + tanker.yPos + ' 299'; 
+        destroyerAction = '' + tanker.xPos + ' ' + tanker.yPos + ' 299'; 
     } else {
-        destroyerMovement = stopVehicle(myDestroyer);
+        if( myRage > 60 ) {
+            destroyerAction = calculateNitroGrenade( topWreckId, myDestroyer );    
+        } else {
+            destroyerAction = stopVehicle(myDestroyer);
+        }
     }
+    
+    if( xDesiredPos > 4000 ) {
+        xAdd = false;   
+    } else if (xDesiredPos < -4000 ) {
+        xAdd = true;
+    }
+    
+    if( yDesiredPos > 4000 ) {
+        yAdd = false;   
+    } else if (yDesiredPos < -4000 ) {
+        yAdd = true;
+    }
+    
+    if( xAdd ) {
+        xDesiredPos = xDesiredPos + 1000;
+    } else {
+        xDesiredPos = xDesiredPos - 1000;   
+    }
+    
+    if( yAdd ) {
+        yDesiredPos = yDesiredPos + 1000;
+    } else {
+        yDesiredPos = yDesiredPos - 1000;   
+    }
+        
+    doofAction = '' + xDesiredPos + ' ' + yDesiredPos + ' 299';
 
     // Write an action using print()
     // To debug: printErr('Debug messages...');
     
     // Calc Fastest route to top quantity 
 
-    print( reaperMovement );
-    print( destroyerMovement );
-    print( doofMovement );
+    print( reaperAction );
+    print( destroyerAction );
+    print( doofAction );
 }
