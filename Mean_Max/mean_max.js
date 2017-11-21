@@ -1,7 +1,57 @@
-/**
- * Auto-generated code below aims at helping you parse
- * the standard input according to the problem statement.
- **/
+// List of Improvements
+/*
+
+Reaper Improvements:
+
+1. Cluster Wrecks and track towards highest density
+2. Move away from others when no active wrecks
+3. Continue towards target given specific target (calculating stops)
+4. Ensure target is accessible (no tanker sitting on top, no oil spill)
+
+Destroyer Improvements:
+
+
+1. Either:
+    A. Ram other reapers... maybe target one and have the doof target the 2nd?
+    B. Avoid all other others and focus on tankers.Improvements
+2. Only target full tankers rather than empty tankers
+
+Doof Improvements:
+
+1. Run around avoiding others or bump the other reapers.
+2. Oil the wrecks closest to the 
+
+Overall:
+
+?
+*/
+
+// Arena Objects
+// Static Variables
+
+function Arena() {
+    var xPos = 0;
+    var yPos = 0;
+    var radius = 6000;
+}
+
+function WaterTown() {
+    var xPos = 0;
+    var yPos = 0;
+    var radius = 3000;
+}
+
+var arena = new Arena();
+arena.xPos = 0;
+arena.yPos = 0;
+arena.radius =  6000;
+
+var waterTown = new WaterTown();
+waterTown.xPos = 0;
+waterTown.yPos = 0;
+arena.radius = 3000;
+
+// Definited Objects
 
 function Reaper() {
     var unitId = -1;
@@ -83,24 +133,24 @@ function Point() {
     var yPos = 0;
 }
 
+// Create & Update Methods for Objects
+
 function createUpdateReaper( unitId, inputs ) {
-    var tmpReaper; 
-    
+    var tmpReaper;
     if( reapers[unitId] ) {
         tmpReaper = reapers[unitId];
-    } else if( unitId === myReaper.unitId ) {
-        tmpReaper = myReaper;
     } else {
         tmpReaper = new Reaper();
         tmpReaper.unitId = unitId;
-        tmpReaper.playerId = parseInt(inputs[2]);
-        if( tmpReaper.playerId === 0 && !myReaper) {
-            myReaper = tmpReaper;
-        } else {    
-            reapers[unitId] = tmpReaper;
-        }
+        reapers[unitId] = tmpReaper;
     }
-
+    
+    tmpReaper.playerId = parseInt(inputs[2]);
+    
+    if( tmpReaper.playerId === 0 && !myReaper) {
+        myReaper = tmpReaper;
+    }
+    
     tmpReaper.mass = parseFloat(inputs[3]);
     tmpReaper.radius = parseInt(inputs[4]);
     tmpReaper.xPos = parseInt(inputs[5]);
@@ -115,17 +165,16 @@ function createUpdateDestroyer( unitId, inputs ) {
     var tmpDestroyer;
     if( destroyers[unitId] ) {
         tmpDestroyer = destroyers[unitId];
-    } else if( unitId === myDestroyer.unitId) {
-        tmpDestroyer = myDestroyer;
     } else {
         tmpDestroyer = new Destroyer();
         tmpDestroyer.unitId = unitId;
-        tmpDestroyer.playerId = parseInt(inputs[2]);
-        if( tmpDestroyer.playerId === 0 && !myDestroyer) {
-            myDestroyer = tmpDestroyer;
-        } else {
-            destroyers[unitId] = tmpDestroyer;
-        }
+        destroyers[unitId] = tmpDestroyer;
+    }
+    
+    tmpDestroyer.playerId = parseInt(inputs[2]);
+    
+    if( tmpDestroyer.playerId === 0 && !myDestroyer) {
+        myDestroyer = tmpDestroyer;
     }
     
     tmpDestroyer.mass = parseFloat(inputs[3]);
@@ -142,19 +191,18 @@ function createUpdateDoof( unitId, inputs ) {
     var tmpDoof;
     if( doofs[unitId] ) {
         tmpDoof = doofs[unitId];
-    } else if( unitId === myDoof.unitId ) {
-        tmpDoof = myDoof;
     } else {
         tmpDoof = new Doof();
         tmpDoof.unitId = unitId;
-        tmpDoof.playerId = parseInt(inputs[2]);
-        if( tmpDoof.playerId === 0 && !myDoof) {
-            myDoof = tmpDoof;
-        } else {
-            doofs[unitId] = tmpDoof;
-        }
+        doofs[unitId] = tmpDoof;
     }
-
+    
+    tmpDoof.playerId = parseInt(inputs[2]);
+    
+    if( tmpDoof.playerId === 0 && !myDoof) {
+        myDoof = tmpDoof;
+    }
+    
     tmpDoof.mass = parseFloat(inputs[3]);
     tmpDoof.radius = parseInt(inputs[4]);
     tmpDoof.xPos = parseInt(inputs[5]);
@@ -230,8 +278,19 @@ function createOilPool( unitId, inputs ) {
     return tmpOilPool;
 }
 
-function checkInsideRadius( target, reaper ) {
-    var d2 = Math.pow( reaper.xPos - target.xPos, 2 ) + Math.pow( reaper.yPos - target.yPos, 2);
+// Logical Utility Methods
+
+function checkInsideRadius( target, vehicle ) {
+    var d2 = Math.pow( vehicle.xPos - target.xPos, 2 ) + Math.pow( vehicle.yPos - target.yPos, 2);
+    var r2 = Math.pow( target.radius, 2 );
+    if( d2 < r2 ) {
+        return true;
+    }
+    return false;
+}
+
+function checkInsideRadiusPoints( target, xPos, yPos ) {
+    var d2 = Math.pow( xPos - target.xPos, 2 ) + Math.pow( yPos - target.yPos, 2);
     var r2 = Math.pow( target.radius, 2 );
     if( d2 < r2 ) {
         return true;
@@ -240,7 +299,12 @@ function checkInsideRadius( target, reaper ) {
 }
 
 function distanceToPoint( vehicle, pointX, pointY) {
-    return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
+    var insideArena = checkInsideRadiusPoints( arena, pointX, pointY )
+    if( insideArena ) {
+        return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
+    } else {
+        return -1;
+    }
 }
 
 function calculateVehicleTrajectory( vehicle ) {
@@ -256,7 +320,7 @@ function distanceToVehicle( vehicle1, vehicle2 ) {
 
 function distanceToVehicleTrajectory( vehicle1, vehicle2 ) {
     var pointInFuture = calculateVehicleTrajectory( vehicle2 );
-    return distanceToPoint( vehicle1, pointsInFuture.xPos, pointsInFuture.yPos);
+    return distanceToPoint( vehicle1, pointInFuture.xPos, pointInFuture.yPos);
 }
 
 function stopVehicle( vehicle ) {
@@ -293,12 +357,12 @@ function navigateToClosestWreck( reaper, wrecks, backupAction ) {
     for (var key in wrecks) {
         if (wrecks.hasOwnProperty(key) ) {
             var tmpWreck = wrecks[key];
-            if(!targetWreck) {
+            var tmpDist = distanceToVehicle( reaper, tmpWreck );
+            if(!targetWreck && tmpDist >= 0 ) {
                 targetWreck = tmpWreck;
-                closestDist = distanceToVehicle( reaper, tmpWreck );
+                closestDist = tmpDist;
             } else {
-                tmpDist = distanceToVehicle( reaper, tmpWreck );
-                if( tmpDist < closestDist ) {
+                if( tmpDist < closestDist && tmpDist >= 0) {
                     targetWreck = tmpWreck;
                 }
             }
@@ -318,12 +382,13 @@ function navigateToClosestVehicle( vehicle, vehicles, backupAction ) {
     for (var key in vehicles) {
         if (vehicles.hasOwnProperty(key) ) {
             var tmpVehicle = vehicles[key];
-            if(!targetVehicle) {
+            var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
+            var tmpDistToVehicleTraj = distanceToVehicleTrajectory( vehicle, tmpVehicle );
+            if(!targetVehicle && tmpDistToVehicle >= 0 && tmpDistToVehicleTraj >= 0) {
                 targetVehicle = tmpVehicle;
-                closestDist = distanceToVehicle( vehicle, tmpVehicle );
+                closestDist = tmpDistToVehicle;
             } else {
-                tmpDist = distanceToVehicle( vehicle, tmpVehicle );
-                if( tmpDist < closestDist ) {
+                if( tmpDistToVehicle < closestDist && tmpDistToVehicle >= 0 && tmpDistToVehicleTraj >= 0) {
                     targetVehicle = tmpVehicle;
                 }
             }
@@ -336,7 +401,6 @@ function navigateToClosestVehicle( vehicle, vehicles, backupAction ) {
         return backupAction;
     }
 }
-
 
 // Vehicle Lists
 var reapers = {};
