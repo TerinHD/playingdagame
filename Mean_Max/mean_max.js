@@ -299,7 +299,11 @@ function checkInsideRadiusPoints( target, xPos, yPos ) {
     return false;
 }
 
-function distanceToPoint( vehicle, pointX, pointY) {
+function distanceToPointTrue( vehicle, pointX, pointY ) {
+    return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
+}
+
+function distanceToPoint( vehicle, pointX, pointY ) {
     var insideArena = checkInsideRadiusPoints( arena, pointX, pointY )
     if( insideArena ) {
         return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
@@ -315,8 +319,17 @@ function calculateVehicleTrajectory( vehicle ) {
     return pointToReturn;
 }
 
+function distanceToVehicleTrue( vehicle1, vehicle2 ) {
+    return distanceToPointTrue( vehicle1, vehicle2.xPos, vehicle2.yPos );  
+}
+
 function distanceToVehicle( vehicle1, vehicle2 ) {
     return distanceToPoint( vehicle1, vehicle2.xPos, vehicle2.yPos );  
+}
+
+function distanceToVehicleTrajectoryTrue( vehicle1, vehicle2 ) {
+    var pointInFuture = calculateVehicleTrajectory( vehicle2 );
+    return distanceToPointTrue( vehicle1, pointInFuture.xPos, pointInFuture.yPos);
 }
 
 function distanceToVehicleTrajectory( vehicle1, vehicle2 ) {
@@ -327,7 +340,7 @@ function distanceToVehicleTrajectory( vehicle1, vehicle2 ) {
 function stopVehicle( vehicle ) {
     var xDir = vehicle.xPos - vehicle.xVel;
     var yDir = vehicle.yPos - vehicle.yVel;
-    var dist = distanceToPoint( vehicle, xDir, yDir );
+    var dist = distanceToPointTrue( vehicle, xDir, yDir );
     var power = Math.abs(Math.round(dist * vehicle.mass));
     printErr( "Power for stop: " + power ); 
     if( power > 300 ) {
@@ -337,8 +350,16 @@ function stopVehicle( vehicle ) {
 }
 
 function navigateToPoint( vehicle, pointX, pointY) {
-    var dist = distanceToPoint( vehicle, pointX, pointY);
-    var power = ((vehicle.xPos - pointX - vehicle.xVel)/(pointX - vehicle.xPos)) * dist * vehicle.mass;
+    
+    printErr( "Destination: " + pointX + ", " + pointY );
+    printErr( "Velocity: " + vehicle.xVel + ", " + vehicle.yVel );
+    printErr( "Vehicle Position: " + vehicle.xPos + ", " + vehicle.yPos );
+    var xPos = pointX - vehicle.xVel - vehicle.xPos;
+    var yPos = pointY - vehicle.yVel - vehicle.yPos;
+    printErr( "Possible Correction Vector: "  + xPos + ", " + yPos );
+    
+    var dist = distanceToPointTrue( vehicle, xPos, yPos);
+    var power = dist * vehicle.mass;
     power = Math.abs(Math.round(power));
     printErr( "Power for Navigation: " + power ); 
     if( power > 300 ) {
@@ -356,10 +377,13 @@ function navigateToVehicle( vehicle1, vehicle2) {
 function navigateToClosestWreck( reaper, wrecks, backupAction ) {
     var targetWreck = null;
     var closestDist = null;
+    var countWrecks = 0;
     for (var key in wrecks) {
         if (wrecks.hasOwnProperty(key) ) {
+            countWrecks += 1;
+            printErr( " Number of Wrecks: " + countWrecks );
             var tmpWreck = wrecks[key];
-            var tmpDist = distanceToVehicle( reaper, tmpWreck );
+            var tmpDist = distanceToVehicleTrue( reaper, tmpWreck );
             if(!targetWreck && tmpDist >= 0 ) {
                 targetWreck = tmpWreck;
                 closestDist = tmpDist;
@@ -372,6 +396,7 @@ function navigateToClosestWreck( reaper, wrecks, backupAction ) {
     }
     
     if( targetWreck ) {
+        printErr( "Navigate Reaper to Wreck");
         return navigateToPoint( reaper, targetWreck.xPos, targetWreck.yPos);
     } else {
         return backupAction;
@@ -385,7 +410,7 @@ function navigateToClosestVehicle( vehicle, vehicles, backupAction ) {
         if (vehicles.hasOwnProperty(key) ) {
             var tmpVehicle = vehicles[key];
             var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
-            var tmpDistToVehicleTraj = distanceToVehicleTrajectory( vehicle, tmpVehicle );
+            var tmpDistToVehicleTraj = distanceToVehicleTrajectoryTrue( vehicle, tmpVehicle );
             if(!targetVehicle && tmpDistToVehicle >= 0 && tmpDistToVehicleTraj >= 0) {
                 targetVehicle = tmpVehicle;
                 closestDist = tmpDistToVehicle;
@@ -399,6 +424,34 @@ function navigateToClosestVehicle( vehicle, vehicles, backupAction ) {
     
     if( targetVehicle ) {
         return navigateToVehicle( vehicle, targetVehicle);
+    } else {
+        return backupAction;
+    }
+}
+
+function navigateToClosestEnemy( vehicle, vehicles, backupAction ) {
+    var targetVehicle = null;
+    var closestDist = null;
+    for (var key in vehicles) {
+        if (vehicles.hasOwnProperty(key) ) {
+            var tmpVehicle = vehicles[key];
+            printErr( "TmpVehicle Player Id: " + tmpVehicle.playerId );
+            if( !(tmpVehicle.playerId === 0) ) {
+                var tmpDistToVehicle = distanceToVehicleTrue( vehicle, tmpVehicle );
+                if(!targetVehicle && tmpDistToVehicle >= 0 ) {
+                    targetVehicle = tmpVehicle;
+                    closestDist = tmpDistToVehicle;
+                } else {
+                    if( tmpDistToVehicle < closestDist && tmpDistToVehicle >= 0) {
+                        targetVehicle = tmpVehicle;
+                    }
+                }
+            }
+        } 
+    }
+    
+    if( targetVehicle ) {
+        return navigateToPoint( vehicle, targetVehicle.xPos, targetVehicle.yPos);
     } else {
         return backupAction;
     }
@@ -461,8 +514,9 @@ while (true) {
     var targetWreck = null;
     
     // Clear Tankers & Wrecks
-    tankers = {};
+    var countWrecksInInput = 0;
     wrecks = {};
+    tankers = {};
     tarPools = {};
     oilPools = {};
     var lastTankerId = -1;
@@ -487,7 +541,7 @@ while (true) {
             lastTankerId = unitId;
         } else if( unitType === 4 ) {
             var tmpWreck = createUpdateWreck( unitId, inputs );
-            
+            countWrecksInInput += 1;
             if( tmpWreck.waterQuantity > topWaterQuantity ) {
                 topWreckId = unitId;
                 topWaterQuantity = tmpWreck.waterQuantity;
@@ -514,6 +568,7 @@ while (true) {
         // var extra2 = parseInt(inputs[10]);
     }
     
+    printErr(" Number of Wrecks in input: " + countWrecksInInput);
     
     // Calculate Reaper Actions
     if( reaperInsideWreck ) {
@@ -538,6 +593,7 @@ while (true) {
         //     backupAction = targetTarSkill( myReaper, reapers,   );   
         // } else {
         var    backupAction = navigateToVehicle( myReaper, myDestroyer );
+        // var backupAction = navigateToPoint( myReaper, 0, 0);
         // }
         
         reaperAction = navigateToClosestWreck( myReaper, wrecks, backupAction );
@@ -553,31 +609,33 @@ while (true) {
     
     // Calculate Doof Actions
     
-    if( xDesiredPos > 4000 ) {
-        xAdd = false;   
-    } else if (xDesiredPos < -4000 ) {
-        xAdd = true;
-    }
+    // if( xDesiredPos > 4000 ) {
+    //     xAdd = false;   
+    // } else if (xDesiredPos < -4000 ) {
+    //     xAdd = true;
+    // }
     
-    if( yDesiredPos > 4000 ) {
-        yAdd = false;   
-    } else if (yDesiredPos < -4000 ) {
-        yAdd = true;
-    }
+    // if( yDesiredPos > 4000 ) {
+    //     yAdd = false;   
+    // } else if (yDesiredPos < -4000 ) {
+    //     yAdd = true;
+    // }
     
-    if( xAdd ) {
-        xDesiredPos = xDesiredPos + 1000;
-    } else {
-        xDesiredPos = xDesiredPos - 1000;   
-    }
+    // if( xAdd ) {
+    //     xDesiredPos = xDesiredPos + 1000;
+    // } else {
+    //     xDesiredPos = xDesiredPos - 1000;   
+    // }
     
-    if( yAdd ) {
-        yDesiredPos = yDesiredPos + 1000;
-    } else {
-        yDesiredPos = yDesiredPos - 1000;   
-    }
-        
-    doofAction = '' + xDesiredPos + ' ' + yDesiredPos + ' 299';
+    // if( yAdd ) {
+    //     yDesiredPos = yDesiredPos + 1000;
+    // } else {
+    //     yDesiredPos = yDesiredPos - 1000;   
+    // }
+    
+    printErr(" Calc Doof Action" );
+    doofAction = navigateToClosestEnemy( myDoof, reapers, "WAIT");
+    printErr( " Doof Action: " + doofAction );
     
     // Report Our Actions
 
