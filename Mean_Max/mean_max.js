@@ -441,6 +441,54 @@ function navigateToClosestEnemy( vehicle, vehicles, backupAction ) {
     }
 }
 
+
+
+function vehicleInWreck( vehicle, wrecks ) {
+    var results = {};
+    results.inside = false;
+    results.wreck = null;
+    for (var key in wrecks) {
+        if (wrecks.hasOwnProperty(key) ) {
+            var tmpWreck = wrecks[key];
+            if( checkInsideRadius( tmpWreck, vehicle ) ) {
+                results.inside = true;   
+                results.wreck = tmpWreck;
+                break;
+            }
+        } 
+    }
+    return results;
+}
+
+function oilSpill( vehicle, reapers, wrecks ) {
+    var resultsOilSpill = {};
+    resultsOilSpill.viableTarget = false;
+    resultsOilSpill.action = "WAIT";
+    var targetWreck = null;
+    for (var key in reapers) {
+        if (reapers.hasOwnProperty(key) ) {
+            var tmpVehicle = reapers[key];
+            printErr( "reapers Player Id: " + reapers.playerId );
+            if( !(reapers.playerId === 0) ) {
+                var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
+                if( tmpDistToVehicle < 2000  ) {
+                    var results = vehicleInWreck( tmpVehicle, wrecks );
+                    if(results.inside && !checkInsideRadius( results.wreck, myReaper ) && distanceToVehicle( vehicle, results.wreck ) < 2000 ) {
+                        targetWreck = results.wreck;
+                    }
+                }
+            }
+        } 
+    }
+    
+    if( targetWreck ) {
+        resultsOilSpill.viableTarget = true;
+        resultsOilSpill.action = "SKILL " + targetWreck.xPos + " " + targetWreck.yPos;
+    }
+    
+    return resultsOilSpill;
+}
+
 // Vehicle Lists
 var reapers = {};
 var reaperIds = [];
@@ -526,10 +574,10 @@ while (true) {
         } else if( unitType === 4 ) {
             var tmpWreck = createUpdateWreck( unitId, inputs );
             countWrecksInInput += 1;
-            if( tmpWreck.waterQuantity > topWaterQuantity ) {
-                topWreckId = unitId;
-                topWaterQuantity = tmpWreck.waterQuantity;
-            }
+            // if( tmpWreck.waterQuantity > topWaterQuantity ) {
+            //     topWreckId = unitId;
+            //     topWaterQuantity = tmpWreck.waterQuantity;
+            // }
             
             if( checkInsideRadius( tmpWreck, myReaper ) && !reaperInsideWreck) {
                 reaperInsideWreck = true;   
@@ -593,8 +641,18 @@ while (true) {
     
     // Calculate Doof Actions
     
-    // printErr(" Calc Doof Action" );
-    doofAction = navigateToClosestEnemy( myDoof, reapers, "WAIT");
+    printErr(" Calc Doof Action" );
+    var backupAction = "WAIT";
+    if( myRage > 90 ) {
+        var resultsOilSpill = oilSpill( myDoof, reapers, wrecks );
+        if( resultsOilSpill.viableTarget ) {
+            doofAction = resultsOilSpill.action;
+        } else {
+            doofAction = navigateToClosestEnemy( myDoof, reapers, "WAIT");
+        }
+    } else {
+        doofAction = navigateToClosestEnemy( myDoof, reapers, "WAIT");
+    }
     printErr( " Doof Action: " + doofAction );
     
     // Report Our Actions
