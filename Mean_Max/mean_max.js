@@ -18,7 +18,6 @@ Destroyer Improvements:
 
 Doof Improvements:
 
-1. Run around avoiding others or bump the other reapers.
 2. Oil the wrecks closest to the 
 
 Overall:
@@ -49,7 +48,7 @@ arena.radius =  6000;
 var waterTown = new WaterTown();
 waterTown.xPos = 0;
 waterTown.yPos = 0;
-arena.radius = 3000;
+waterTown.radius = 3000;
 
 // Definited Objects
 
@@ -299,17 +298,8 @@ function checkInsideRadiusPoints( target, xPos, yPos ) {
     return false;
 }
 
-function distanceToPointTrue( vehicle, pointX, pointY ) {
-    return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
-}
-
 function distanceToPoint( vehicle, pointX, pointY ) {
-    var insideArena = checkInsideRadiusPoints( arena, pointX, pointY )
-    if( insideArena ) {
-        return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
-    } else {
-        return -1;
-    }
+    return Math.sqrt( (vehicle.xPos - pointX) * (vehicle.xPos - pointX) + (vehicle.yPos - pointY) * (vehicle.yPos - pointY));
 }
 
 function calculateVehicleTrajectory( vehicle ) {
@@ -319,17 +309,8 @@ function calculateVehicleTrajectory( vehicle ) {
     return pointToReturn;
 }
 
-function distanceToVehicleTrue( vehicle1, vehicle2 ) {
-    return distanceToPointTrue( vehicle1, vehicle2.xPos, vehicle2.yPos );  
-}
-
 function distanceToVehicle( vehicle1, vehicle2 ) {
     return distanceToPoint( vehicle1, vehicle2.xPos, vehicle2.yPos );  
-}
-
-function distanceToVehicleTrajectoryTrue( vehicle1, vehicle2 ) {
-    var pointInFuture = calculateVehicleTrajectory( vehicle2 );
-    return distanceToPointTrue( vehicle1, pointInFuture.xPos, pointInFuture.yPos);
 }
 
 function distanceToVehicleTrajectory( vehicle1, vehicle2 ) {
@@ -340,7 +321,7 @@ function distanceToVehicleTrajectory( vehicle1, vehicle2 ) {
 function stopVehicle( vehicle ) {
     var xDir = vehicle.xPos - vehicle.xVel;
     var yDir = vehicle.yPos - vehicle.yVel;
-    var dist = distanceToPointTrue( vehicle, xDir, yDir );
+    var dist = distanceToPoint( vehicle, xDir, yDir );
     var power = Math.abs(Math.round(dist * vehicle.mass));
     printErr( "Power for stop: " + power ); 
     if( power > 300 ) {
@@ -358,7 +339,7 @@ function navigateToPoint( vehicle, pointX, pointY) {
     var yPos = pointY - vehicle.yVel - vehicle.yPos;
     printErr( "Possible Correction Vector: "  + xPos + ", " + yPos );
     
-    var dist = distanceToPointTrue( vehicle, xPos, yPos);
+    var dist = distanceToPoint( vehicle, xPos, yPos);
     var power = dist * vehicle.mass;
     power = Math.abs(Math.round(power));
     printErr( "Power for Navigation: " + power ); 
@@ -383,7 +364,7 @@ function navigateToClosestWreck( reaper, wrecks, backupAction ) {
             countWrecks += 1;
             printErr( " Number of Wrecks: " + countWrecks );
             var tmpWreck = wrecks[key];
-            var tmpDist = distanceToVehicleTrue( reaper, tmpWreck );
+            var tmpDist = distanceToVehicle( reaper, tmpWreck );
             if(!targetWreck && tmpDist >= 0 ) {
                 targetWreck = tmpWreck;
                 closestDist = tmpDist;
@@ -403,20 +384,23 @@ function navigateToClosestWreck( reaper, wrecks, backupAction ) {
     }
 }
 
-function navigateToClosestVehicle( vehicle, vehicles, backupAction ) {
+function navigateToClosestTankers( vehicle, vehicles, backupAction ) {
     var targetVehicle = null;
     var closestDist = null;
     for (var key in vehicles) {
         if (vehicles.hasOwnProperty(key) ) {
             var tmpVehicle = vehicles[key];
-            var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
-            var tmpDistToVehicleTraj = distanceToVehicleTrajectoryTrue( vehicle, tmpVehicle );
-            if(!targetVehicle && tmpDistToVehicle >= 0 && tmpDistToVehicleTraj >= 0) {
-                targetVehicle = tmpVehicle;
-                closestDist = tmpDistToVehicle;
-            } else {
-                if( tmpDistToVehicle < closestDist && tmpDistToVehicle >= 0 && tmpDistToVehicleTraj >= 0) {
+            var insideArena = checkInsideRadiusPoints( arena, tmpVehicle.xPos, tmpVehicle.yPos )
+            if( insideArena ) {
+                var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
+                var tmpDistToVehicleTraj = distanceToVehicleTrajectory( vehicle, tmpVehicle );
+                if(!targetVehicle ) {
                     targetVehicle = tmpVehicle;
+                    closestDist = tmpDistToVehicle;
+                } else {
+                    if( tmpDistToVehicle < closestDist ) {
+                        targetVehicle = tmpVehicle;
+                    }
                 }
             }
         } 
@@ -437,12 +421,12 @@ function navigateToClosestEnemy( vehicle, vehicles, backupAction ) {
             var tmpVehicle = vehicles[key];
             printErr( "TmpVehicle Player Id: " + tmpVehicle.playerId );
             if( !(tmpVehicle.playerId === 0) ) {
-                var tmpDistToVehicle = distanceToVehicleTrue( vehicle, tmpVehicle );
-                if(!targetVehicle && tmpDistToVehicle >= 0 ) {
+                var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
+                if(!targetVehicle) {
                     targetVehicle = tmpVehicle;
                     closestDist = tmpDistToVehicle;
                 } else {
-                    if( tmpDistToVehicle < closestDist && tmpDistToVehicle >= 0) {
+                    if( tmpDistToVehicle < closestDist) {
                         targetVehicle = tmpVehicle;
                     }
                 }
@@ -603,37 +587,13 @@ while (true) {
     
     // Calculate Destroyer Actions
     
-    destroyerAction = navigateToClosestVehicle( myDestroyer, tankers, "WAIT" );
+    destroyerAction = navigateToClosestTankers( myDestroyer, tankers, "WAIT" );
     
     
     
     // Calculate Doof Actions
     
-    // if( xDesiredPos > 4000 ) {
-    //     xAdd = false;   
-    // } else if (xDesiredPos < -4000 ) {
-    //     xAdd = true;
-    // }
-    
-    // if( yDesiredPos > 4000 ) {
-    //     yAdd = false;   
-    // } else if (yDesiredPos < -4000 ) {
-    //     yAdd = true;
-    // }
-    
-    // if( xAdd ) {
-    //     xDesiredPos = xDesiredPos + 1000;
-    // } else {
-    //     xDesiredPos = xDesiredPos - 1000;   
-    // }
-    
-    // if( yAdd ) {
-    //     yDesiredPos = yDesiredPos + 1000;
-    // } else {
-    //     yDesiredPos = yDesiredPos - 1000;   
-    // }
-    
-    printErr(" Calc Doof Action" );
+    // printErr(" Calc Doof Action" );
     doofAction = navigateToClosestEnemy( myDoof, reapers, "WAIT");
     printErr( " Doof Action: " + doofAction );
     
