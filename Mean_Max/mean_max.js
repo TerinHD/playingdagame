@@ -62,8 +62,6 @@ function Reaper() {
     var yPos = 0;
     var xVel = 0;
     var yVel = 0;
-    var friction = 0.2;
-    var throttle = 0;
 }
 
 function Destroyer() {
@@ -75,8 +73,6 @@ function Destroyer() {
     var yPos = 0;
     var xVel = 0;
     var yVel = 0;
-    var friction = 0.3;
-    var throttle = 0;
 }
 
 function Doof() {
@@ -88,8 +84,6 @@ function Doof() {
     var yPos = 0;
     var xVel = 0;
     var yVel = 0;
-    var friction = 0.3;
-    var throttle = 0;
 }
 
 function Tanker() {
@@ -102,8 +96,6 @@ function Tanker() {
     var yVel = 0;
     var waterQuantity = -1;
     var waterCapacity = -1;
-    var friction = 0.4;
-    var throttle = 500;
 }
 
 function Wreck() {
@@ -158,6 +150,8 @@ function createUpdateReaper( unitId, inputs ) {
     tmpReaper.xVel = parseInt(inputs[7]);
     tmpReaper.yVel = parseInt(inputs[8]);  
     
+    tmpReaper.friction = 0.2;
+    
     return tmpReaper;
 }
 
@@ -183,6 +177,8 @@ function createUpdateDestroyer( unitId, inputs ) {
     tmpDestroyer.yPos = parseInt(inputs[6]);
     tmpDestroyer.xVel = parseInt(inputs[7]);
     tmpDestroyer.yVel = parseInt(inputs[8]);
+    
+    tmpDestroyer.friction = 0.3;
     
     return tmpDestroyer;
 }
@@ -210,6 +206,8 @@ function createUpdateDoof( unitId, inputs ) {
     tmpDoof.xVel = parseInt(inputs[7]);
     tmpDoof.yVel = parseInt(inputs[8]);
     
+    tmpDoof.friction = 0.3;
+    
     return tmpDoof;
 }
 
@@ -231,6 +229,9 @@ function createUpdateTanker( unitId, inputs ) {
     tmpTanker.yVel = parseInt(inputs[8]);
     tmpTanker.waterQuantity = parseInt(inputs[9]);
     tmpTanker.waterCapacity = parseInt(inputs[10]);
+    
+    tmpTanker.friction = 0.4;
+    tmpTanker.throttle = 500;
     
     return tmpTanker;
 }
@@ -343,6 +344,7 @@ function navigateToPoint( vehicle, pointX, pointY) {
     if( power > 300 ) {
         power = 300;   
     }
+    
     return '' + pointX + ' ' + pointY + ' ' + power;
 }
 
@@ -413,6 +415,7 @@ var tankers = {};
 // Wrecks
 var wrecks = {};
 
+
 // Pools
 var tarPools = {};
 var oilPools = {};
@@ -455,6 +458,7 @@ while (true) {
     
     var topWaterQuantity = 0;
     var topWreckId = -1;
+    var targetWreck = null;
     
     // Clear Tankers & Wrecks
     tankers = {};
@@ -491,6 +495,7 @@ while (true) {
             
             if( checkInsideRadius( tmpWreck, myReaper ) && !reaperInsideWreck) {
                 reaperInsideWreck = true;   
+                targetWreck = tmpWreck;
             }
         } else if( unitType === 5) {
             createTarPool( unitId, inputs );   
@@ -512,8 +517,11 @@ while (true) {
     
     // Calculate Reaper Actions
     if( reaperInsideWreck ) {
+        
+        
         if( myReaper.xVel === 0 && myReaper.yVel == 0 ) {
-            reaperAction = 'WAIT';   
+            reaperAction = navigateToPoint( myReaper, targetWreck.xPos, targetWreck.yPos);
+            // reaperAction = 'WAIT';   
         } else {
             reaperAction = stopVehicle( myReaper );   
         }
@@ -525,8 +533,12 @@ while (true) {
             // reaperAction = stopVehicle( myReaper );
         // }
         
-        // var backupAction = stopVehicle( reaper );
-        var backupAction = navigateToVehicle( myReaper, myDestroyer );
+        // var backupAction = stopVehicle( myReaper );
+        // if( myRage > 60 ) {
+        //     backupAction = targetTarSkill( myReaper, reapers,   );   
+        // } else {
+        var    backupAction = navigateToVehicle( myReaper, myDestroyer );
+        // }
         
         reaperAction = navigateToClosestWreck( myReaper, wrecks, backupAction );
     }
