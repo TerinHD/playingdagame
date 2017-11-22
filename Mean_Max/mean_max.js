@@ -332,19 +332,21 @@ function stopVehicle( vehicle ) {
 
 function navigateToPoint( vehicle, pointX, pointY) {
     
-    printErr( "Destination: " + pointX + ", " + pointY );
-    printErr( "Velocity: " + vehicle.xVel + ", " + vehicle.yVel );
-    printErr( "Vehicle Position: " + vehicle.xPos + ", " + vehicle.yPos );
-    var xPos = pointX - vehicle.xVel - vehicle.xPos;
-    var yPos = pointY - vehicle.yVel - vehicle.yPos;
-    printErr( "Possible Correction Vector: "  + xPos + ", " + yPos );
+    // printErr( "Destination: " + pointX + ", " + pointY );
+    // printErr( "Velocity: " + vehicle.xVel + ", " + vehicle.yVel );
+    // printErr( "Vehicle Position: " + vehicle.xPos + ", " + vehicle.yPos );
+    // var xPos = pointX - vehicle.xVel - vehicle.xPos;
+    // var yPos = pointY - vehicle.yVel - vehicle.yPos;
+    // printErr( "Possible Correction Vector: "  + xPos + ", " + yPos );
     
-    var dist = distanceToPoint( vehicle, xPos, yPos);
+    // var dist = distanceToPoint( vehicle, xPos, yPos);
+    var dist = distanceToPoint( vehicle, pointX, pointY);
     var power = dist * vehicle.mass;
     power = Math.abs(Math.round(power));
     printErr( "Power for Navigation: " + power ); 
     if( power > 300 ) {
-        power = 300;   
+        var division = power / 300;
+        power = Math.round( power / division );   
     }
     
     return '' + pointX + ' ' + pointY + ' ' + power;
@@ -362,7 +364,6 @@ function navigateToClosestWreck( reaper, wrecks, backupAction ) {
     for (var key in wrecks) {
         if (wrecks.hasOwnProperty(key) ) {
             countWrecks += 1;
-            printErr( " Number of Wrecks: " + countWrecks );
             var tmpWreck = wrecks[key];
             var tmpDist = distanceToVehicle( reaper, tmpWreck );
             if(!targetWreck && tmpDist >= 0 ) {
@@ -419,7 +420,6 @@ function navigateToClosestEnemy( vehicle, vehicles, backupAction ) {
     for (var key in vehicles) {
         if (vehicles.hasOwnProperty(key) ) {
             var tmpVehicle = vehicles[key];
-            printErr( "TmpVehicle Player Id: " + tmpVehicle.playerId );
             if( !(tmpVehicle.playerId === 0) ) {
                 var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
                 if(!targetVehicle) {
@@ -468,7 +468,6 @@ function oilSpill( vehicle, reapers, wrecks ) {
     for (var key in reapers) {
         if (reapers.hasOwnProperty(key) ) {
             var tmpVehicle = reapers[key];
-            printErr( "reapers Player Id: " + reapers.playerId );
             if( !(reapers.playerId === 0) ) {
                 var tmpDistToVehicle = distanceToVehicle( vehicle, tmpVehicle );
                 if( tmpDistToVehicle < 2000  ) {
@@ -600,12 +599,9 @@ while (true) {
         // var extra2 = parseInt(inputs[10]);
     }
     
-    printErr(" Number of Wrecks in input: " + countWrecksInInput);
-    
     // Calculate Reaper Actions
+    printErr( "*********** Calc Reaper Action " );
     if( reaperInsideWreck ) {
-        
-        
         if( myReaper.xVel === 0 && myReaper.yVel == 0 ) {
             reaperAction = navigateToPoint( myReaper, targetWreck.xPos, targetWreck.yPos);
             // reaperAction = 'WAIT';   
@@ -624,24 +620,26 @@ while (true) {
         // if( myRage > 60 ) {
         //     backupAction = targetTarSkill( myReaper, reapers,   );   
         // } else {
+        printErr( " CALC Nav to Destroyer" );
         var    backupAction = navigateToVehicle( myReaper, myDestroyer );
         // var backupAction = navigateToPoint( myReaper, 0, 0);
         // }
-        
+        printErr( " CALC Nav to Closest Wreck" );
         reaperAction = navigateToClosestWreck( myReaper, wrecks, backupAction );
     }
+    printErr( "*********** Reaper Action: " + reaperAction );
     
     
     
     // Calculate Destroyer Actions
-    
+    printErr( "$$$$$$$$$ Calc Destroyer Action " );
     destroyerAction = navigateToClosestTankers( myDestroyer, tankers, "WAIT" );
-    
+    printErr( "$$$$$$$$$ Destroyer Action: " + destroyerAction );
     
     
     // Calculate Doof Actions
     
-    printErr(" Calc Doof Action" );
+    printErr("@@@@@@@@@@ Calc Doof Action" );
     var backupAction = "WAIT";
     if( myRage > 90 ) {
         var resultsOilSpill = oilSpill( myDoof, reapers, wrecks );
@@ -653,11 +651,11 @@ while (true) {
     } else {
         doofAction = navigateToClosestEnemy( myDoof, reapers, "WAIT");
     }
-    printErr( " Doof Action: " + doofAction );
+    printErr( "@@@@@@@@@@ Doof Action: " + doofAction );
     
     // Report Our Actions
 
-    print( reaperAction + " Traitor" );
-    print( destroyerAction + " Burner" );
-    print( doofAction + " Proc" );
+    print( reaperAction + " Larry" );
+    print( destroyerAction + " Curly" );
+    print( doofAction + " Moe" );
 }
