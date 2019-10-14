@@ -1,3 +1,12 @@
+// List of Improvements
+
+/*
+
+1. ?
+
+
+*/
+
 class Entity {
     id: string;
     xPos: number;
@@ -73,12 +82,6 @@ class Bot extends Entity {
             let mapPosition = map.get(key);
             this.xDigPos = -1;
             this.yDigPos = -1;  
-            
-            const targetIndex = targetArray.indexOf(mapPosition);
-            if( targetIndex !== -1 ) {
-                console.error("Removing Target: " + key);
-                targetArray.splice(targetIndex, 1);
-            }
         }
         
         if( this.previousActionRequestRadar && this.item === 2 && radarRequester === this.id ) {
@@ -97,6 +100,7 @@ class MapPos extends Entity {
     positionClaimed:  boolean;
     noOreLeft: boolean = false; // False = unknown, true = dug no ore found
     previousDigFoundOre: boolean = false; // False means unknown, true means previous dig found ore here
+    weDugThisHole: boolean = false; // False means unknown, true means we dug it
     
     constructor(id:string, oreValueKnown: boolean, holeExists: boolean, oreCount: number, xPos: number, yPos: number) {
         super(id, xPos, yPos);
@@ -109,20 +113,22 @@ class MapPos extends Entity {
 
 function calculateAction( bot: Bot,  radarCooldown: number, trapCooldown: number): void {
     let action = "WAIT";
-    if( bot.xPos === 0 && radarCooldown === 0 && bot.item === -1 && !radarClaimed ) {
-        if(radarRequester !== "" ) {
+    
+    console.error(" Bot: " + bot.id + " radarCooldown: " + radarCooldown + " radarRequester: " + radarRequester + " botItem: " + bot.item );
+    if( bot.xPos === 0 && radarCooldown === 0 && bot.item === -1 && ((!radarClaimed && hasOreArray.length < 5) || bot.id === radarRequester)) {
+        if(radarRequester !== "" && radarRequester !== bot.id ) {
             reCalcBotArray.push(myBots.get(radarRequester));
         }
         radarRequester = bot.id;
         bot.previousActionRequestRadar = true;
         radarClaimed = true;
         bot.action = "REQUEST RADAR";
-    } else if( bot.xPos === 0 && trapCooldown === 0 && bot.item === -1 && !trapClaimed ) {
+    } else if( bot.xPos === 0 && trapCooldown === 0 && bot.item === -1 && !trapClaimed && Math.floor(Math.random() * 2) === 0) {
         trapClaimed = true;
         bot.action = "REQUEST TRAP";
     } else if( bot.item === 4 ) {
         bot.action = "MOVE 0 " + bot.yPos;
-    } else if( radarCooldown === 0 && bot.item === -1 && (radarRequester === bot.id || radarRequester === "")) {
+    } else if( radarCooldown === 0 && bot.item === -1 && (radarRequester === bot.id || radarRequester === "") && hasOreArray.length < 5) {
         radarRequester = bot.id;
         bot.previousActionRequestRadar = true;
         bot.action = "REQUEST RADAR";
@@ -166,7 +172,7 @@ function calculateAction( bot: Bot,  radarCooldown: number, trapCooldown: number
 function calculateTrapLocation( bot: Bot ): string {
     if( bot.xTargetPos !== -1 && bot.yTargetPos !== -1 ) {
         let atTarget = isBotAtTargetLocation( bot );
-        if( atTarget && isTargetATrap(bot)) { 
+        if( isTargetATrap(bot) || hasNoOre(bot) || isRiskyOre(bot) ) { 
             bot.xTargetPos = -1;
             bot.yTargetPos = -1;
             return calculateTrapLocation( bot );
@@ -176,26 +182,25 @@ function calculateTrapLocation( bot: Bot ): string {
         return "MOVE " + bot.xTargetPos + " " + bot.yTargetPos;
     } else {
         // Calculate Radar Target Location
-        console.error("Radar HasOreArrayLength: " + hasOreArray.length);
+        //console.error("Radar HasOreArrayLength: " + hasOreArray.length);
         if(hasOreArray.length > 0 ) {
             //const targetIndex = Math.floor(Math.random() * hasOreArray.length);
             // const targetPos = hasOreArray.splice(targetIndex, 1)[0];
-            const targetPos = hasOreArray.shift();
+            const targetPos = findClosestTarget(bot, hasOreArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
-            targetArray.push(targetPos);
         } else {
             // const targetIndex = Math.floor(Math.random() * unexploredArray.length);
             // const targetPos = unexploredArray.splice(targetIndex, 1)[0];
-            const targetPos = unexploredArray.shift();
+            // const targetPos = unexploredArray.shift();
+            const targetPos = findClosestTarget(bot, unexploredArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
-            targetArray.push(targetPos);
         }
         
-        if( isTargetATrap(bot) || hasNoOre(bot) ) {
+        if( isTargetATrap(bot) || hasNoOre(bot) || isRiskyOre(bot)) {
             bot.xTargetPos = -1;
             bot.yTargetPos = -1;
             return calculateTrapLocation(bot);
@@ -208,7 +213,7 @@ function calculateTrapLocation( bot: Bot ): string {
 function calculateRadarLocation( bot: Bot ): string {
     if( bot.xTargetPos !== -1 && bot.yTargetPos !== -1 ) {
         let atTarget = isBotAtTargetLocation( bot );
-        if( atTarget && isTargetATrap(bot)) { 
+        if( isTargetATrap(bot) || isRiskyOre(bot)) { 
             bot.xTargetPos = -1;
             bot.yTargetPos = -1;
             return calculateRadarLocation( bot );
@@ -218,26 +223,29 @@ function calculateRadarLocation( bot: Bot ): string {
         return "MOVE " + bot.xTargetPos + " " + bot.yTargetPos;
     } else {
         // Calculate Radar Target Location
-        console.error("Radar HasOreArrayLength: " + hasOreArray.length);
-        if(hasOreArray.length > 0 ) {
+        //error("Radar HasOreArrayLength: " + hasOreArray.length);
+        if( radarLocationArray.length > 0 ) {
             //const targetIndex = Math.floor(Math.random() * hasOreArray.length);
             // const targetPos = hasOreArray.splice(targetIndex, 1)[0];
-            const targetPos = hasOreArray.shift();
+            const targetPos = radarLocationArray.shift();
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
-            targetArray.push(targetPos);
+        } else if ( hasOreArray.length > 0 ) {
+            const targetPos = findClosestTarget(bot, hasOreArray);
+            
+            bot.xTargetPos = targetPos.xPos;
+            bot.yTargetPos = targetPos.yPos;
         } else {
-             const targetIndex = Math.floor(Math.random() * (unexploredArray.length / 4));
-             const targetPos = unexploredArray.splice(targetIndex, 1)[0];
-            // const targetPos = unexploredArray.shift();
-            
+            const targetIndex = Math.floor(Math.random() * (unexploredArray.length / 4));
+            const targetPos = unexploredArray.splice(targetIndex, 1)[0];            
+            // const targetPos = findClosestTarget(bot, unexploredArray);
+    
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
-            targetArray.push(targetPos);
         }
         
-        if( isTargetATrap(bot) || hasNoOre(bot) ) {
+        if( isTargetATrap(bot) || isRiskyOre(bot)) {
             bot.xTargetPos = -1;
             bot.yTargetPos = -1;
             return calculateRadarLocation(bot);
@@ -250,7 +258,7 @@ function calculateRadarLocation( bot: Bot ): string {
 function calculateMoveOrDigEmpty( bot: Bot ): string {
     if( bot.xTargetPos !== -1 && bot.yTargetPos !== -1 ) {
         let atTarget = isBotAtTargetLocation( bot );
-        if( atTarget && isTargetATrap(bot)) { 
+        if( isTargetATrap(bot) || hasNoOre(bot) || isRiskyOre(bot)) { 
             bot.xTargetPos = -1;
             bot.yTargetPos = -1;
             return calculateMoveOrDigEmpty( bot );
@@ -260,26 +268,24 @@ function calculateMoveOrDigEmpty( bot: Bot ): string {
         return "MOVE " + bot.xTargetPos + " " + bot.yTargetPos;
     } else {
         // Calculate Dig Target Location
-        console.error("Dig/Move HasOreArrayLength: " + hasOreArray.length);
+        //console.error("Dig/Move HasOreArrayLength: " + hasOreArray.length);
         if(hasOreArray.length > 0 ) {
             // const targetIndex = Math.floor(Math.random() * hasOreArray.length);
             // const targetPos = hasOreArray.splice(targetIndex, 1)[0];
-            const targetPos = hasOreArray.shift();
+            const targetPos = findClosestTarget(bot, hasOreArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
-            targetArray.push(targetPos);
         } else {
-            // const targetIndex = Math.floor(Math.random() * unexploredArray.length);
+            // const targetIndex = Math.floor(Math.random() * (unexploredArray.length / 2));
             // const targetPos = unexploredArray.splice(targetIndex, 1)[0];
-            const targetPos = unexploredArray.shift();
+            const targetPos = findClosestTarget(bot, unexploredArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
-            targetArray.push(targetPos);
         }
         
-        if( isTargetATrap(bot) ) {
+        if( isTargetATrap(bot) || hasNoOre(bot) || isRiskyOre(bot) ) {
             bot.xTargetPos = -1;
             bot.yTargetPos = -1;
             return calculateMoveOrDigEmpty(bot);
@@ -295,11 +301,18 @@ function updateBot( bot: Bot ): void {
 }
 
 function isBotAtTargetLocation( bot: Bot ): boolean {
-    if( bot.xPos === bot.xTargetPos || (bot.xPos - 1) === bot.xTargetPos || (bot.xPos + 1) === bot.xTargetPos) {
-        if( bot.yPos === bot.yTargetPos || (bot.yPos - 1) === bot.yTargetPos || (bot.yPos + 1) === bot.yTargetPos) {
-            return true;
-        }
+    
+    // Check if at location
+    if( bot.xPos === bot.xTargetPos && bot.yPos === bot.yTargetPos ) {
+        return true;
+    // Check if North or South of Location
+    } else if( bot.xPos === bot.xTargetPos && (bot.yPos - 1 === bot.yTargetPos || bot.yPos + 1 === bot.yTargetPos)) {
+        return true;
+    // Check if East or West
+    } else if( bot.yPos === bot.yTargetPos && (bot.xPos - 1 === bot.xTargetPos || bot.xPos + 1 === bot.xTargetPos)) {
+        return true;
     }
+    
     return false;
 }
 
@@ -311,6 +324,12 @@ function isTargetATrap(bot: Bot): boolean {
         }
     });
     return isTargetATrap;
+}
+
+function isRiskyOre(bot: Bot): boolean {
+    let key: string = "Pos-" + bot.xTargetPos + "-" + bot.yTargetPos
+    let mapPos = map.get(key);
+    return hasRiskyOreArray.includes(mapPos);
 }
 
 function hasNoOre( bot: Bot): boolean {
@@ -327,6 +346,10 @@ function setDig( bot: Bot): string {
     let action = "DIG " + bot.xDigPos + " " + bot.yDigPos; 
     bot.previousActionDig = true;
     
+    let key: string = "Pos-" + bot.xDigPos + "-" + bot.yDigPos;
+    let mapPos = map.get(key);
+    mapPos.weDugThisHole = true;
+    
     return action;
 }
 
@@ -335,6 +358,44 @@ function closerToBase(pos1, pos2) {
   return pos1.xPos - pos2.xPos;
 }
 
+function distanceBetweenEntities( entity: Entity, entity2: Entity ) {
+    return Math.sqrt( (entity.xPos - entity2.xPos) * (entity.xPos - entity2.xPos) + (entity.yPos - entity2.yPos) * (entity.yPos - entity2.yPos));
+}
+
+function findClosestTarget( bot: Bot, entityArray: Entity[] ): Entity {
+    let currentClosestIndex = 0;
+    let currentDistance = 1000;
+    for( let i = 0; i < entityArray.length; i++ ) {
+        const tempDistance = distanceBetweenEntities( bot, entityArray[i]);
+        if(tempDistance < currentDistance) {
+            currentDistance = tempDistance;
+            currentClosestIndex =  i;
+        }
+    }
+    
+    return entityArray.splice(currentClosestIndex, 1)[0];
+}
+
+function addRadarLocations() {
+    // for
+    // if( j === 6 && i === yStartRadarLocation ) {
+    //     radarLocationArray.push(position);
+    // } else {
+    //     let goodRadarLocation:boolean = true;
+    //     for( let k = 0; k < radarLocationArray.length && goodRadarLocation; k++) {
+    //         const position2 = radarLocationArray[k];
+    //         if( distanceBetweenEntities( position, position2) < 4 ) {
+    //             goodRadarLocation = false;
+    //         }
+    //     }
+        
+    //     if( goodRadarLocation ) {
+    //         radarLocationArray.push(position);
+    //     } else {
+            
+    //     }
+    // }   
+}
 
 /**
  * Deliver more ore to hq (left side of the map) than your opponent. Use radars to find ore but beware of traps!
@@ -351,14 +412,18 @@ let radarRequester: string = "";
 let myBotsArray = new Array();
 let reCalcBotArray = new Array();
 let map = new Map();
-let targetArray = new Array();
 let unexploredArray = new Array();
+let notDugByUsArray = new Array();
 let noOreLeftArray = new Array();
 let hasOreArray = new Array();
+let hasRiskyOreArray = new Array();
+let radarLocationArray = new Array();
 let myBots = new Map();
 let otherBots = new Map();
 let traps = new Map();
 let radars = new Map();
+
+
 
 // game loop
 while (true) {
@@ -387,6 +452,18 @@ while (true) {
                 }
             }
             
+            if( position.holeExists && !position.weDugThisHole ) {
+                if(!notDugByUsArray.includes(position)) {
+                    notDugByUsArray.push(position);   
+                }
+                
+                // Remove from Unexplored
+                const unexploredIndex = unexploredArray.indexOf(position);
+                if( unexploredIndex != -1 ) {
+                    unexploredArray.splice(unexploredIndex, 1);
+                }
+            }
+            
             if(oreValueKnown) {
                 // Remove from Unexplored
                 const unexploredIndex = unexploredArray.indexOf(position);
@@ -395,12 +472,22 @@ while (true) {
                 }
                 
                 // Add to correct other list if it isn't already there.
-                if( oreCount !== 0 && !hasOreArray.includes(position)) {
+                if( oreCount !== 0 && !hasOreArray.includes(position) && !notDugByUsArray.includes(position)) {
                     hasOreArray.push(position);
+                } else if (oreCount !== 0 && !hasRiskyOreArray.includes(position) && notDugByUsArray.includes(position) ) {
+                    hasRiskyOreArray.push(position);   
+                    
+                    // Remove from hasOreArray
+                    const hasOreIndex = hasOreArray.indexOf(position);
+                    if( hasOreIndex != -1 ) {
+                        hasOreArray.splice(hasOreIndex, 1);
+                    }
                 } else if( oreCount === 0 && !noOreLeftArray.includes(position)) {
                     noOreLeftArray.push(position);
                 }
             }
+            
+           
         }
     }
     
@@ -478,9 +565,10 @@ while (true) {
     // console.error("MyBotArray Count: " + myBotsArray.length);
     // console.error("OtherBots Count: " + otherBots.size);
     console.error("Unexplored Count: " + unexploredArray.length);
+    console.error("Holes Not Dug by Us: " + notDugByUsArray.length);
     console.error("Has No Ore Count: " + noOreLeftArray.length);
     console.error("Has Ore Count: " + hasOreArray.length);
-    console.error("Target Count: " + targetArray.length);
+    console.error("Radar Locations: " + radarLocationArray.length);
     console.error("Radars Count: " + radars.size);
     console.error("Traps Count: " + traps.size);
     
@@ -488,6 +576,10 @@ while (true) {
     
     hasOreArray.sort(closerToBase);
     unexploredArray.sort(closerToBase);
+    radarLocationArray.sort(closerToBase);
+    
+    
+    
     
     for(let i = 0; i < 5; i++) {
         let currentBot = myBotsArray[i];
@@ -496,7 +588,6 @@ while (true) {
     }
     
     while( reCalcBotArray.length > 0 ) {
-        console.error("In While Loop");
         let currentBot = reCalcBotArray.pop();
         calculateAction(currentBot, radarCooldown, trapCooldown); 
     }
