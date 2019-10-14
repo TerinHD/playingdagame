@@ -162,12 +162,12 @@ function calculateTrapLocation( bot: Bot ): string {
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
         } else if( unexploredArray.length > 0 ) {
-            const targetPos = findClosestTarget(bot, unexploredArray);
+            const targetPos = findClosestExplorationTarget(bot, unexploredArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
         } else if( unexploredBufferArray.length > 0 ) {
-            const targetPos = findClosestTarget(bot, unexploredBufferArray);
+            const targetPos = findClosestExplorationTarget(bot, unexploredBufferArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
@@ -383,12 +383,12 @@ function calculateMoveOrDigEmpty( bot: Bot ): string {
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
         } else if( unexploredArray.length > 0 ){
-            const targetPos = findClosestTarget(bot, unexploredArray);
+            const targetPos = findClosestExplorationTarget(bot, unexploredArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
         } else if( unexploredBufferArray.length > 0 ){
-            const targetPos = findClosestTarget(bot, unexploredBufferArray);
+            const targetPos = findClosestExplorationTarget(bot, unexploredBufferArray);
             
             bot.xTargetPos = targetPos.xPos;
             bot.yTargetPos = targetPos.yPos;
@@ -494,6 +494,56 @@ function findClosestTarget( bot: Bot, entityArray: Entity[] ): Entity {
     }
     
     return entityArray.splice(currentClosestIndex, 1)[0];
+}
+
+function findClosestExplorationTarget( bot: Bot, entityArray: Entity[] ): Entity {
+    let currentClosestIndex = -1;
+    let currentDistance = 1000;
+    let backupIndex = 0;
+    let backupDistance = 1000;
+    for( let i = 0; i < entityArray.length; i++ ) {
+        let entity = entityArray[i];
+        if(checkIsValidExploreLocation(entity)) {
+            const tempDistance = distanceBetweenEntities( bot, entity);
+            if(tempDistance < currentDistance) {
+                currentDistance = tempDistance;
+                currentClosestIndex =  i;
+            }
+        } else {
+            const tempDistance = distanceBetweenEntities( bot, entity);
+            if(tempDistance < backupDistance) {
+                backupDistance = tempDistance;
+                backupIndex =  i;
+            }
+        }
+    }
+
+    if(currentClosestIndex == -1) {
+        return entityArray.splice(backupIndex, 1)[0];
+    }
+    
+    return entityArray.splice(currentClosestIndex, 1)[0];
+}
+
+function checkIsValidExploreLocation( entity: Entity ):boolean {
+    let keyNorth: string = "Pos-" + entity.xPos + "-" + (entity.yPos -1);
+    let keyEast: string = "Pos-" + (entity.xPos + 1) + "-" + entity.yPos;
+    let keySouth: string = "Pos-" + entity.xPos + "-" + (entity.yPos + 1);
+    let keyWest: string = "Pos-" + (entity.xPos - 1) + "-" + entity.yPos;
+
+    let keyArray: string[] = [ keyNorth, keyEast, keySouth, keyWest];
+
+    // console.error("We think enemy when west... towards home after standingstill: " + keyArray);
+    for(let i = 0; i < keyArray.length; i++) {
+        if( map.has(keyArray[i])) {
+            let mapPos = map.get(keyArray[i]);
+            if(mapPos.holeExists) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 function checkIsValidRadarLocation( mapPos: MapPos, seperationDist: number ) {
