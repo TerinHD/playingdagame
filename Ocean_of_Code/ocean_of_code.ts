@@ -6,6 +6,9 @@
  * * Improve firing solutions
  * * Improve movement so don't trap myself
  * * Start location... needs to be in the largest continuous water... islands can create smaller closed off water locations... :(
+ * * Update Tracking to take into account Sonar
+ * * Update Tracking to take into account silence <-- Priority
+ * * Track enemy cooldowns... would be imperfect...
  * 
  * 
  */
@@ -64,10 +67,18 @@ class MapPos extends Entity {
 class MapMove {
     mapPos: MapPos;
     directionLabel: string;
+    distanceMoved: number = 1;
+    posMovedThrough: MapPos[];
 
-    constructor( mapPos: MapPos, directionLabel: string) {
+    constructor( mapPos: MapPos, directionLabel: string, distanceMoved?:number, posMovedThrough?:MapPos[]) {
         this.mapPos = mapPos;
         this.directionLabel = directionLabel;
+        if(distanceMoved) {
+            this.distanceMoved = distanceMoved;
+        }
+        if(posMovedThrough) {
+            this.posMovedThrough = posMovedThrough;
+        }
     }
 }
 
@@ -204,72 +215,90 @@ function calculateSectorValue(mapPos: MapPos) {
             
 }
 
+function calculateEnemyPosSurface( enemyOrder: string) {
+    let tempEnemyOrder = enemyOrder;
+    const enemySector:number = Number(tempEnemyOrder.replace('SURFACE ', ''));
+    let newPotentialEnemyPositions:MapPos[] = new Array();
+    for( let potentialPos of potentialEnemyPositions) {
+        if( potentialPos.sector === enemySector) {
+            newPotentialEnemyPositions.push(potentialPos);
+        }
+    }
+    potentialEnemyPositions = newPotentialEnemyPositions;
+}
+
+function calculateEnemyPosTorpedo( enemyOrder:string ) {
+    let tempEnemyOrder = enemyOrder;
+    const position = tempEnemyOrder.replace('TORPEDO ', '').split(' ');
+    if( position.length === 2 ) {
+        const xPos:number = Number(position[0]);
+        const yPos:number = Number(position[1]);
+        let newPotentialEnemyPositions:MapPos[] = new Array();
+        for( let potentialPos of potentialEnemyPositions) {
+            // console.error(" Checking distance between:  "  + xPos + "," + yPos + " and " + potentialPos.xPos + "," + potentialPos.yPos);
+            if( distanceBetweenEntities(potentialPos, map.get(createMapId(xPos, yPos))) <= TORPEDO_RANGE) {
+                newPotentialEnemyPositions.push(potentialPos);
+            }
+        }
+        potentialEnemyPositions = newPotentialEnemyPositions;
+    } else {
+        console.error("SOMETHING WENT HORRIBLY WRONG PARSING AN ENEMY TORPEDO ACTION: " + enemyOrder);
+    }
+}
+
+function calculateEnemyPosMove( enemyOrder:string) {
+    let tempEnemyOrder = enemyOrder;
+    const directionLabel = tempEnemyOrder.replace('MOVE ', '');
+
+    let newPotentialEnemyPositions:MapPos[] = new Array();
+    for( let potentialPos of potentialEnemyPositions) {
+        let newPotentialPos: MapPos;
+        switch(directionLabel) {
+            case NORTH_LABEL:
+                if( potentialPos.maxNorth > 0 ) {
+                    newPotentialPos = map.get(createMapId(potentialPos.xPos, potentialPos.yPos + NORTH ));
+                }
+                break;
+            case SOUTH_LABEL:
+                if( potentialPos.maxSouth > 0 ) {
+                    newPotentialPos = map.get(createMapId(potentialPos.xPos, potentialPos.yPos + SOUTH ));
+                }
+                break;
+            case EAST_LABEL:
+                if( potentialPos.maxEast > 0 ) {
+                    newPotentialPos = map.get(createMapId(potentialPos.xPos + EAST, potentialPos.yPos));
+                }
+                break;
+            case WEST_LABEL:
+                if( potentialPos.maxWest > 0 ) {
+                    newPotentialPos = map.get(createMapId(potentialPos.xPos + WEST, potentialPos.yPos));
+                }
+                break;
+        }
+
+        if( newPotentialPos && !newPotentialPos.isLand ) {
+            newPotentialEnemyPositions.push(newPotentialPos);
+        }
+    }
+    potentialEnemyPositions = newPotentialEnemyPositions;
+}
+
+function calcultateEnemyPosSilence( enemyOrder: string) {
+    
+}
+
 function calculateEnemyPos( enemyOrders: string[] ) {
 
     for( let enemyOrder of enemyOrders ) {
         console.error("enemyOrder: " + enemyOrder);
         if(enemyOrder.includes('SURFACE') ) {
-            let tempEnemyOrder = enemyOrder;
-            const enemySector:number = Number(tempEnemyOrder.replace('SURFACE ', ''));
-            let newPotentialEnemyPositions:MapPos[] = new Array();
-            for( let potentialPos of potentialEnemyPositions) {
-                if( potentialPos.sector === enemySector) {
-                    newPotentialEnemyPositions.push(potentialPos);
-                }
-            }
-            potentialEnemyPositions = newPotentialEnemyPositions;
+            calculateEnemyPosSurface(enemyOrder);
         } else if (enemyOrder.includes('TORPEDO')) {
-            let tempEnemyOrder = enemyOrder;
-            const position = tempEnemyOrder.replace('TORPEDO ', '').split(' ');
-            if( position.length === 2 ) {
-                const xPos:number = Number(position[0]);
-                const yPos:number = Number(position[1]);
-                let newPotentialEnemyPositions:MapPos[] = new Array();
-                for( let potentialPos of potentialEnemyPositions) {
-                    console.error(" Checking distance between:  "  + xPos + "," + yPos + " and " + potentialPos.xPos + "," + potentialPos.yPos);
-                    if( distanceBetweenEntities(potentialPos, map.get(createMapId(xPos, yPos))) <= TORPEDO_RANGE) {
-                        newPotentialEnemyPositions.push(potentialPos);
-                    }
-                }
-                potentialEnemyPositions = newPotentialEnemyPositions;
-            } else {
-                console.error("SOMETHING WENT HORRIBLY WRONG PARSING AN ENEMY TORPEDO ACTION: " + enemyOrder);
-            }
+            calculateEnemyPosTorpedo(enemyOrder);
         } else if (enemyOrder.includes('MOVE')) {
-            let tempEnemyOrder = enemyOrder;
-            const directionLabel = tempEnemyOrder.replace('MOVE ', '');
-
-            let newPotentialEnemyPositions:MapPos[] = new Array();
-            for( let potentialPos of potentialEnemyPositions) {
-                let newPotentialPos: MapPos;
-                switch(directionLabel) {
-                    case NORTH_LABEL:
-                        if( potentialPos.maxNorth > 0 ) {
-                            newPotentialPos = map.get(createMapId(potentialPos.xPos, potentialPos.yPos + NORTH ));
-                        }
-                        break;
-                    case SOUTH_LABEL:
-                        if( potentialPos.maxSouth > 0 ) {
-                            newPotentialPos = map.get(createMapId(potentialPos.xPos, potentialPos.yPos + SOUTH ));
-                        }
-                        break;
-                    case EAST_LABEL:
-                        if( potentialPos.maxEast > 0 ) {
-                            newPotentialPos = map.get(createMapId(potentialPos.xPos + EAST, potentialPos.yPos));
-                        }
-                        break;
-                    case WEST_LABEL:
-                        if( potentialPos.maxWest > 0 ) {
-                            newPotentialPos = map.get(createMapId(potentialPos.xPos + WEST, potentialPos.yPos));
-                        }
-                        break;
-                }
-
-                if( newPotentialPos && !newPotentialPos.isLand ) {
-                    newPotentialEnemyPositions.push(newPotentialPos);
-                }
-            }
-            potentialEnemyPositions = newPotentialEnemyPositions;
+            calculateEnemyPosMove(enemyOrder);
+        } else if (enemyOrder.includes("SILENCE")) {
+            calcultateEnemyPosSilence(enemyOrder);
         }
         console.error("Potential Enemy Pos#s: " + potentialEnemyPositions.length);
         if(potentialEnemyPositions.length === 1) {
@@ -413,13 +442,54 @@ function findMoveTowardsTarget( positionChecker: Function ):MapMove {
     return nextPos;
 }
 
+function findSilenceDirectionalPosibitilies( positionChecker: Function, directionLabel: string, direction: number, xAxis:boolean, possiblePositions:MapMove[]) {
+    let directionCount: number = 1;
+    let unsafeFound: boolean = false;
+    let lastPosFound: MapPos = myCurrentPos;
+    let positionsMovedThrough: MapPos[] = new Array();
+
+    while( directionCount <= 4 && !unsafeFound) {
+        let nextPosToCheck: MapPos = null;
+        if(xAxis) { // East & West Movement
+            nextPosToCheck = map.get(createMapId(lastPosFound.xPos + direction, lastPosFound.yPos));
+        } else { // North & South Movement
+            nextPosToCheck = map.get(createMapId(lastPosFound.xPos, lastPosFound.yPos + direction));
+        }
+
+        if( nextPosToCheck && positionChecker(nextPosToCheck)) {
+            positionsMovedThrough.push(lastPosFound);
+            possiblePositions.push( new MapMove(nextPosToCheck, directionLabel, directionCount, positionsMovedThrough));
+            lastPosFound = nextPosToCheck;
+            directionCount++;
+        } else {
+            unsafeFound = true;
+        }
+    }
+}
+
+function findSilenceMove( positionChecker: Function): MapMove {
+
+    let possiblePositions: MapMove[] = new Array();
+
+    findSilenceDirectionalPosibitilies(positionChecker, 'N', NORTH, false, possiblePositions );
+    findSilenceDirectionalPosibitilies(positionChecker, 'S', SOUTH, false, possiblePositions );
+    findSilenceDirectionalPosibitilies(positionChecker, 'E', EAST, true, possiblePositions );
+    findSilenceDirectionalPosibitilies(positionChecker, 'W', WEST, true, possiblePositions );
+
+    return findRandomMove(positionChecker, possiblePositions);
+}
+
 function calculateNextMove(): string {
     
     let command: string = '';
     let mapMove: MapMove;
+    let useSilence: boolean = false;
 
     if( potentialEnemyPositions.length === 1 ) {
         mapMove = findMoveTowardsTarget(isPositionLegal);
+    } else if (currentSilenceCooldown === 0 ) {
+        useSilence = true;
+        mapMove = findSilenceMove(isPositionLegal);
     } else {
         mapMove = findMove(isPositionLegal);
     }
@@ -438,7 +508,33 @@ function calculateNextMove(): string {
             command = "SURFACE";
         }
     } else {
-        command = 'MOVE ' + mapMove.directionLabel + ' TORPEDO';
+
+        let power:String = 'TORPEDO';
+
+        if( currentSilenceCooldown > 0 ) {
+            power = 'SILENCE';
+        }
+
+        if( currentSonarCooldown > 0 ) {
+            power = 'SONAR';
+        }
+
+        if( currentTorpedoCooldown > 0 ) {
+            power = 'TORPEDO';
+        }
+
+        // if( currentMineCooldown > 0 ) {
+        //     power = 'MINE';
+        // }
+
+        if(useSilence) {
+            command = 'SILENCE ' + mapMove.directionLabel + ' ' + mapMove.distanceMoved;
+            for( let mapPos of mapMove.posMovedThrough) {
+                mapPos.weHaveBeen = true;
+            }
+        } else {
+            command = 'MOVE ' + mapMove.directionLabel + ' ' + power;
+        }
     }
 
     if( currentTorpedoCooldown === 0 && potentialEnemyPositions.length === 1) {
